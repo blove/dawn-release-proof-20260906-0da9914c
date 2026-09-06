@@ -1,0 +1,20 @@
+// Scheduling integration only. Candidate and package absence are synthetic fixtures.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {parsePublicationState,validateAllAttemptJobs} from '../source/scripts/release/metadata.mjs';
+import {CANONICAL_RELEASE_PACKAGE_ORDER} from '../source/scripts/release/manifest.mjs';
+const runId=Number(process.env.GITHUB_RUN_ID),runAttempt=Number(process.env.GITHUB_RUN_ATTEMPT);
+const api=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/current-jobs.json','utf8'));
+const jobs=api.jobs.map(j=>({id:j.id,runAttempt:j.run_attempt,name:j.name,status:j.status,conclusion:j.conclusion,startedAt:j.started_at,completedAt:j.completed_at})).sort((a,b)=>a.runAttempt-b.runAttempt||a.id-b.id);
+console.log(JSON.stringify({diagnosticOnly:true,realRunId:runId,realRunAttempt:runAttempt,jobs}));
+assert.equal(jobs.filter(j=>j.name==='publish-npm').length,0,'live lazy downstream publisher should be absent');
+assert.equal(jobs.filter(j=>j.name==='escrow'&&j.status==='in_progress').length,1);
+const candidate={version:'0.8.22',commitSha:'0123456789abcdef0123456789abcdef01234567',ciWorkflow:'CI',ciCheck:'validate',publisherWorkflow:'.github/workflows/release.yml'};
+const observedAt=new Date().toISOString();
+const inventory={packages:CANONICAL_RELEASE_PACKAGE_ORDER.map(name=>({name}))};
+const state={schemaVersion:1,version:candidate.version,commitSha:candidate.commitSha,tag:'v'+candidate.version,observedAt,candidateRuns:[{runId,runAttempt,headSha:candidate.commitSha,headBranch:'v'+candidate.version,workflowPath:'.github/workflows/release.yml',event:'workflow_dispatch',jobs}],registryMutationReceipts:[],packages:inventory.packages.map(({name})=>({name,version:candidate.version,status:'ABSENT',httpStatus:404,observedAt}))};
+assert.throws(()=>validateAllAttemptJobs(jobs,runAttempt),/exactly one publish-npm/);
+assert.throws(()=>parsePublicationState(state,{candidate,inventory}),/exactly one publish-npm/);
+assert.throws(()=>parsePublicationState(state,{candidate,inventory,escrowRun:{runId:runId+1,runAttempt}}),/exactly one publish-npm/);
+parsePublicationState(state,{candidate,inventory,escrowRun:{runId,runAttempt}});
+console.log(JSON.stringify({diagnosticOnly:true,sourceSha:'baf08cb4a03832462e44438581d7b6f05868e68e',strictValidatorRejected:true,defaultParserRejected:true,wrongRunRejected:true,exactActiveEscrowAccepted:true,packageAbsence:'synthetic-not-proof'}));

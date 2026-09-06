@@ -1,0 +1,48 @@
+name: Diagnostic escrow parser
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo prepare
+  attest:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo attest
+  escrow:
+    needs: attest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: cacheplane/dawnai
+          ref: baf08cb4a03832462e44438581d7b6f05868e68e
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.19.0
+      - name: Validate patched parser against actual lazy jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git -C source rev-parse HEAD)" = baf08cb4a03832462e44438581d7b6f05868e68e
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/current-jobs.json"
+          node diagnostic/escrow-parser.mjs
+  publish-npm:
+    needs: escrow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo diagnostic-only-no-publish
