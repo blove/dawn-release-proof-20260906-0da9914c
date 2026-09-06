@@ -24,5 +24,5 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Prove historical writer reachability without writing
-        run: exit 1
+      - name: Prove current writer reachability without writing
+        run: exit 2
