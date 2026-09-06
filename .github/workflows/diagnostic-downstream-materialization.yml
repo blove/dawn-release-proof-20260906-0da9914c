@@ -1,0 +1,37 @@
+name: Diagnostic downstream materialization
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo prepare
+  attest:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo attest
+  escrow:
+    needs: attest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Inspect exact current attempt jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/current-jobs.json"
+          jq '{total_count,jobs:[.jobs[]|{id,name,status,conclusion,run_attempt}]}' "$RUNNER_TEMP/current-jobs.json"
+          count=$(jq '[.jobs[]|select(.name=="publish-npm")]|length' "$RUNNER_TEMP/current-jobs.json")
+          echo "publish-npm count=$count attempt=$GITHUB_RUN_ATTEMPT"
+          test "$count" -eq 1
+  publish-npm:
+    needs: escrow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo diagnostic-only-no-publish
